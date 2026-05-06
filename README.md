@@ -14,19 +14,57 @@ The repository contains four main parts:
 ## Workflow Diagram
 
 ```mermaid
-flowchart TD
-	A[Serial hardware bit stream] --> B[Collect data on COM19]
-	B --> D
-	D --> E[Save hybrid_random_bits.csv]
-	E --> F[Extract features]
-	F --> G[Chunk into 1000-bit blocks]
-	G --> H[Load model.pkl]
-	H --> I[Classify chunks as Good or Weak]
-	I --> J{Good randomness?}
-	J -- Yes --> K[Derive AES-256 key]
-	K --> L[Encrypt / decrypt files]
-	J -- No --> M[Disable crypto actions]
-	D --> N[View bit stream and graphs in GUI]
+%% Quantum tunneling based TRNG pipeline
+flowchart LR
+	%% Physics layer
+	subgraph P[Physics Layer]
+		direction LR
+		A[Reverse Bias Voltage Applied] --> B[Strong Electric Field Across Depletion Region]
+		B --> C[Quantum Tunneling Effect]
+		C --> D[Random Electron Movement]
+		D --> E[Noise Generation in Zener Diode]
+	end
+
+	%% Signal processing layer
+	subgraph S[Signal Processing Layer]
+		direction LR
+		E --> F[Analog Noise Signal]
+		F --> G[Signal Amplification and Filtering]
+		G --> H[ESP32 ADC Sampling]
+		H --> I[Digital Random Values]
+		I --> J[Threshold Comparator]
+		J --> K[Binary Bitstream Generation]
+	end
+
+	%% ML validation layer
+	subgraph M[ML Layer]
+		direction LR
+		K --> L[Machine Learning Validation]
+	end
+
+	%% Cryptography layer
+	subgraph C[Cryptography Layer]
+		direction LR
+		L --> N[Cryptographic Key Generation]
+		N --> O[Encryption and Decryption]
+	end
+
+	%% Layer styling
+	classDef physics fill:#eef4ff,stroke:#4f76c7,stroke-width:1px,color:#102a43;
+	classDef signal fill:#eefaf3,stroke:#2f8f5b,stroke-width:1px,color:#102a43;
+	classDef ml fill:#fff7e8,stroke:#c9851a,stroke-width:1px,color:#102a43;
+	classDef crypto fill:#f5efff,stroke:#7a57c2,stroke-width:1px,color:#102a43;
+
+	class A,B,C,D,E physics;
+	class F,G,H,I,J,K signal;
+	class L ml;
+	class N,O crypto;
+
+	%% Subtle grouping borders for readability
+	style P fill:#f8fbff,stroke:#b6c8e6,stroke-width:1px,rx:6,ry:6
+	style S fill:#f7fcf9,stroke:#c6e3d1,stroke-width:1px,rx:6,ry:6
+	style M fill:#fffaf0,stroke:#ead39c,stroke-width:1px,rx:6,ry:6
+	style C fill:#fbf7ff,stroke:#d8c9f2,stroke-width:1px,rx:6,ry:6
 ```
 
 The current implementation uses a fixed feature schema for model input:
