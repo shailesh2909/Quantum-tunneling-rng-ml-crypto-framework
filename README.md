@@ -15,39 +15,35 @@ The repository contains four main parts:
 
 ```mermaid
 %% Quantum tunneling based TRNG pipeline
-flowchart LR
+flowchart TD
 	%% Physics layer
-	subgraph P[Physics Layer]
-		direction LR
-		A[Reverse Bias Voltage Applied] --> B[Strong Electric Field Across Depletion Region]
-		B --> C[Quantum Tunneling Effect]
-		C --> D[Random Electron Movement]
-		D --> E[Noise Generation in Zener Diode]
+	subgraph PLY[Physics Layer]
+		direction TB
+		A[Reverse Bias Voltage Applied] --> B[Strong Electric Field Across Depletion Region] --> C[Quantum Tunneling Effect] --> D[Random Electron Movement] --> E[Noise Generation in Zener Diode]
 	end
 
 	%% Signal processing layer
-	subgraph S[Signal Processing Layer]
-		direction LR
-		E --> F[Analog Noise Signal]
-		F --> G[Signal Amplification and Filtering]
-		G --> H[ESP32 ADC Sampling]
-		H --> I[Digital Random Values]
-		I --> J[Threshold Comparator]
-		J --> K[Binary Bitstream Generation]
+	subgraph SGL[Signal Processing Layer]
+		direction TB
+		F[Analog Noise Signal] --> G[Signal Amplification and Filtering] --> H[ESP32 ADC Sampling] --> I[Digital Random Values] --> J[Threshold Comparator] --> K[Binary Bitstream Generation]
 	end
 
 	%% ML validation layer
-	subgraph M[ML Layer]
-		direction LR
-		K --> L[Machine Learning Validation]
+	subgraph MLY[ML Layer]
+		direction TB
+		L[Machine Learning Validation]
 	end
 
 	%% Cryptography layer
-	subgraph C[Cryptography Layer]
-		direction LR
-		L --> N[Cryptographic Key Generation]
-		N --> O[Encryption and Decryption]
+	subgraph CRY[Cryptography Layer]
+		direction TB
+		N[Cryptographic Key Generation] --> O[Encryption and Decryption]
 	end
+
+	%% Main pipeline connections
+	E --> F
+	K --> L
+	L --> N
 
 	%% Layer styling
 	classDef physics fill:#eef4ff,stroke:#4f76c7,stroke-width:1px,color:#102a43;
@@ -61,10 +57,10 @@ flowchart LR
 	class N,O crypto;
 
 	%% Subtle grouping borders for readability
-	style P fill:#f8fbff,stroke:#b6c8e6,stroke-width:1px,rx:6,ry:6
-	style S fill:#f7fcf9,stroke:#c6e3d1,stroke-width:1px,rx:6,ry:6
-	style M fill:#fffaf0,stroke:#ead39c,stroke-width:1px,rx:6,ry:6
-	style C fill:#fbf7ff,stroke:#d8c9f2,stroke-width:1px,rx:6,ry:6
+	style PLY fill:#f8fbff,stroke:#b6c8e6,stroke-width:1px,rx:6,ry:6
+	style SGL fill:#f7fcf9,stroke:#c6e3d1,stroke-width:1px,rx:6,ry:6
+	style MLY fill:#fffaf0,stroke:#ead39c,stroke-width:1px,rx:6,ry:6
+	style CRY fill:#fbf7ff,stroke:#d8c9f2,stroke-width:1px,rx:6,ry:6
 ```
 
 The current implementation uses a fixed feature schema for model input:
