@@ -1,6 +1,6 @@
 # Quantum Tunneling RNG + ML Crypto Framework
 
-This project combines hardware-generated entropy, machine-learning based randomness classification, and AES-256-GCM file encryption into a single desktop application. The workflow is built around a hybrid bit stream produced from a serial hardware source and a secure software random bit, then analyzed with a trained model before being used as a key source for encryption.
+This project combines hardware-generated entropy, machine-learning based randomness classification, and AES-256-GCM file encryption into a single desktop application. The workflow is built around a hybrid bit stream produced from a serial hardware source, then analyzed with a trained model before being used as a key source for encryption.
 
 ## Overview
 
@@ -16,7 +16,6 @@ The repository contains four main parts:
 ```mermaid
 flowchart TD
 	A[Serial hardware bit stream] --> B[Collect data on COM19]
-	C[Secure software bit] --> D[Hybrid bit stream]
 	B --> D
 	D --> E[Save hybrid_random_bits.csv]
 	E --> F[Extract features]
@@ -99,7 +98,7 @@ train_model.py loads dataset.csv, splits the data into train and test sets, trai
 
 ### 4. Hardware / hybrid bit collection
 
-collect_data.py opens COM19 at 115200 baud, discards the first 50 lines as startup noise, then reads 0/1 values from the serial port. The collected hardware bits are combined with secure software randomness to form the final bit stream, which is saved to hybrid_random_bits.csv.
+collect_data.py opens COM19 at 115200 baud, discards the first 50 lines as startup noise, then reads 0/1 values from the serial port. The collected hardware bits are saved to hybrid_random_bits.csv.
 
 ### 5. Hardware stream analysis
 
