@@ -406,13 +406,13 @@ class RandomnessAnalyzer:
 
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Randomness Security Analyzer")
+        self.root.title("Randomness Analyzer")
         self.root.configure(bg=BG)
-        self.root.minsize(1140, 880)
+        self.root.minsize(1140, 960)
 
         # centre on screen
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
-        w, h = 1200, 940
+        w, h = 1200, 1020
         root.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
 
         # ── state ──
@@ -436,22 +436,47 @@ class RandomnessAnalyzer:
         # ── build UI ──
         self._build_header()
 
-        # scrollable body
-        self._body = tk.Frame(root, bg=BG)
-        self._body.pack(fill="both", expand=True, padx=PAD + S, pady=(0, PAD))
+        # scrollable body using a Canvas + inner Frame
+        self._scroll_canvas = tk.Canvas(root, bg=BG, highlightthickness=0)
+        self._scroll_vsb = tk.Scrollbar(root, orient="vertical",
+                                         command=self._scroll_canvas.yview)
+        self._scroll_canvas.configure(yscrollcommand=self._scroll_vsb.set)
+        self._scroll_vsb.pack(side="right", fill="y")
+        self._scroll_canvas.pack(fill="both", expand=True,
+                                  padx=(PAD + S, 0), pady=(0, PAD))
+
+        self._body = tk.Frame(self._scroll_canvas, bg=BG)
+        self._body_win = self._scroll_canvas.create_window(
+            (0, 0), window=self._body, anchor="nw")
+
+        # keep scroll region in sync with content size
+        self._body.bind("<Configure>",
+            lambda e: self._scroll_canvas.configure(
+                scrollregion=self._scroll_canvas.bbox("all")))
+        self._scroll_canvas.bind("<Configure>", self._on_canvas_resize)
+
+        # mouse‑wheel scrolling
+        self._scroll_canvas.bind_all(
+            "<MouseWheel>",
+            lambda e: self._scroll_canvas.yview_scroll(
+                int(-1 * (e.delta / 120)), "units"))
 
         self._body.columnconfigure(0, weight=2, uniform="c")
         self._body.columnconfigure(1, weight=3, uniform="c")
         self._body.columnconfigure(2, weight=2, uniform="c")
         self._body.rowconfigure(0, weight=3)
         self._body.rowconfigure(1, weight=4)
-        self._body.rowconfigure(2, weight=3)
+        self._body.rowconfigure(2, weight=4)
 
         self._build_control_card()
         self._build_metrics_card()
         self._build_result_card()
         self._build_graph_card()
         self._build_crypto_card()
+
+    def _on_canvas_resize(self, event):
+        """Stretch the inner body frame to fill the canvas width."""
+        self._scroll_canvas.itemconfig(self._body_win, width=event.width)
 
     # ─── styles ───────────────────────────────────────────────
     def _setup_styles(self):
@@ -482,7 +507,7 @@ class RandomnessAnalyzer:
         txt.pack(side="left", fill="y", anchor="w")
 
         self._title_lbl = tk.Label(
-            txt, text="Randomness Security Analyzer", bg=BG, fg=TEXT,
+            txt, text="Randomness Analyzer", bg=BG, fg=TEXT,
             font=(FONT_FAMILY, 20, "bold"))
         self._title_lbl.pack(anchor="w")
 
@@ -541,7 +566,12 @@ class RandomnessAnalyzer:
 
         self.btn_reset = PillButton(btn_frame, text="Reset",
                                     command=self._on_reset, accent=ERROR)
-        self.btn_reset.pack(fill="x")
+        self.btn_reset.pack(fill="x", pady=(0, S))
+
+        self.btn_view_bits = PillButton(btn_frame, text="View Random Bits",
+                                        command=self._on_view_bits,
+                                        accent=TEXT_SEC)
+        self.btn_view_bits.pack(fill="x")
 
         # status row
         status_row = tk.Frame(inner, bg=SURFACE)
@@ -846,32 +876,32 @@ class RandomnessAnalyzer:
         try:
             import serial as _serial
             ser = _serial.Serial("COM19", 115200, timeout=1)
-            hw, rnd, final = [], [], []
+            final = []
             for _ in range(50):
                 ser.readline()
-            while len(hw) < 10000:
+            while len(final) < 10000:
                 line = ser.readline().decode("utf-8", errors="ignore").strip()
                 if line in ("0", "1"):
                     hb = int(line)
-                    hw.append(hb)
                     rb = secrets.randbits(1)
-                    rnd.append(rb)
                     fb = hb ^ rb
                     final.append(fb)
                     shared_bits.append(fb)
             ser.close()
             bits = final
-            pd.DataFrame({
-                "hardware_bit": hw, "random_bit": rnd, "final_bit": final
-            }).to_csv(os.path.join(os.path.dirname(__file__),
-                                    "hybrid_random_bits.csv"), index=False)
+            pd.DataFrame({"bit": final}).to_csv(
+                os.path.join(os.path.dirname(__file__),
+                             "hybrid_random_bits.csv"), index=False)
         except Exception:
             csv_path = os.path.join(os.path.dirname(__file__),
                                      "hybrid_random_bits.csv")
             if os.path.exists(csv_path):
                 df = pd.read_csv(csv_path)
-                col = "final_bit" if "final_bit" in df.columns else "bit"
-                bits = df[col].tolist()
+                # support old 3-column and new 1-column formats
+                for col_name in ("bit", "final_bit"):
+                    if col_name in df.columns:
+                        bits = df[col_name].tolist()
+                        break
                 # simulate live feed for CSV fallback
                 for b in bits:
                     shared_bits.append(b)
@@ -998,6 +1028,107 @@ class RandomnessAnalyzer:
         self._crypto_key_var.set("—")
         self._crypto_status("Run analysis with GOOD randomness to enable", TEXT_MUTED)
         self._update_crypto_buttons()
+
+    # ── View Random Bits ──────────────────────────────────────
+
+    def _on_view_bits(self):
+        csv_path = os.path.join(os.path.dirname(__file__),
+                                 "hybrid_random_bits.csv")
+        if not os.path.exists(csv_path):
+            self._set_status("No bits file found — collect data first", WARN)
+            return
+
+        df = pd.read_csv(csv_path)
+        for col_name in ("bit", "final_bit"):
+            if col_name in df.columns:
+                bits = df[col_name].tolist()
+                break
+        else:
+            self._set_status("CSV has no recognised bit column", ERROR)
+            return
+
+        bit_str = "".join(str(b) for b in bits)
+
+        # ── popup window ──
+        win = tk.Toplevel(self.root)
+        win.title("Generated Random Bits")
+        win.configure(bg=BG)
+        win.minsize(640, 480)
+        sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        pw, ph = 720, 560
+        win.geometry(f"{pw}x{ph}+{(sw-pw)//2}+{(sh-ph)//2}")
+
+        # header
+        hdr = tk.Frame(win, bg=BG)
+        hdr.pack(fill="x", padx=PAD, pady=(PAD, S))
+        tk.Label(hdr, text="🎲  Random Bits Viewer", bg=BG, fg=TEXT,
+                 font=(FONT_FAMILY, 16, "bold")).pack(side="left")
+        tk.Label(hdr, text=f"{len(bits):,} bits",
+                 bg=BG, fg=SUCCESS, font=(MONO, 12, "bold")).pack(side="right")
+
+        tk.Frame(win, bg=BORDER, height=1).pack(fill="x", padx=PAD)
+
+        # info row
+        info = tk.Frame(win, bg=BG)
+        info.pack(fill="x", padx=PAD, pady=(S, S))
+        tk.Label(info, text=f"Source:  {csv_path}", bg=BG, fg=TEXT_SEC,
+                 font=(MONO, 8), anchor="w").pack(side="left")
+
+        # scrollable text area
+        txt_frame = tk.Frame(win, bg=SURFACE_ALT, padx=1, pady=1)
+        txt_frame.pack(fill="both", expand=True, padx=PAD, pady=(S, S))
+
+        txt = tk.Text(txt_frame, bg=SURFACE, fg=ACCENT_GLOW,
+                      font=(MONO, 11), wrap="word",
+                      insertbackground=ACCENT, selectbackground=ACCENT_DIM,
+                      borderwidth=0, highlightthickness=0, padx=S, pady=S)
+        vsb = tk.Scrollbar(txt_frame, orient="vertical", command=txt.yview)
+        txt.configure(yscrollcommand=vsb.set)
+        vsb.pack(side="right", fill="y")
+        txt.pack(side="left", fill="both", expand=True)
+
+        # insert bits in chunks of 64 for readability
+        for i in range(0, len(bit_str), 64):
+            line = bit_str[i:i+64]
+            txt.insert("end", line + "\n")
+        txt.configure(state="disabled")  # read-only
+
+        # bottom button bar
+        btn_bar = tk.Frame(win, bg=BG)
+        btn_bar.pack(fill="x", padx=PAD, pady=(S, PAD))
+
+        def _copy_bits():
+            win.clipboard_clear()
+            win.clipboard_append(bit_str)
+            status_lbl.configure(text="✓ Copied to clipboard!", fg=SUCCESS)
+            win.after(2000, lambda: status_lbl.configure(
+                text="", fg=TEXT_MUTED))
+
+        def _export_txt():
+            path = filedialog.asksaveasfilename(
+                parent=win, title="Export Random Bits",
+                defaultextension=".txt",
+                filetypes=[("Text file", "*.txt"),
+                           ("Binary file", "*.bin"),
+                           ("All files", "*.*")])
+            if path:
+                with open(path, "w") as f:
+                    f.write(bit_str)
+                status_lbl.configure(
+                    text=f"✓ Exported to {os.path.basename(path)}", fg=SUCCESS)
+                win.after(3000, lambda: status_lbl.configure(
+                    text="", fg=TEXT_MUTED))
+
+        PillButton(btn_bar, text="Copy All Bits", command=_copy_bits,
+                   accent=ACCENT, width=160, height=34).pack(
+                       side="left", padx=(0, S))
+        PillButton(btn_bar, text="Export as .txt", command=_export_txt,
+                   accent=SUCCESS, width=160, height=34).pack(
+                       side="left", padx=(0, S))
+
+        status_lbl = tk.Label(btn_bar, text="", bg=BG, fg=TEXT_MUTED,
+                              font=(FONT_FAMILY, 9))
+        status_lbl.pack(side="left", padx=(GAP, 0))
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     #  ENCRYPTION MODULE
@@ -1230,13 +1361,19 @@ class RandomnessAnalyzer:
     def _post_encrypt(self, dest, elapsed):
         self._crypto_spinner.stop()
         fname = os.path.basename(dest)
-        self._crypto_status(f"Encrypted → {fname}", SUCCESS)
+        fdir = os.path.dirname(dest)
+        self._crypto_status(f"✓ Encrypted → {fname}", SUCCESS)
         size_kb = os.path.getsize(dest) / 1024
         self._crypto_info_var.set(
-            f"AES‑256‑GCM\n"
+            f"AES‑256‑GCM  ✓ Success\n"
+            f"─────────────────────\n"
             f"Output: {fname}\n"
+            f"Saved in: {fdir}\n"
             f"Size: {size_kb:.1f} KB\n"
-            f"Time: {elapsed*1000:.1f} ms")
+            f"Time: {elapsed*1000:.1f} ms\n"
+            f"─────────────────────\n"
+            f"⚠ Save your key to\n"
+            f"  decrypt this file later")
         self._update_crypto_buttons()
 
     # ── decrypt ──
@@ -1271,13 +1408,18 @@ class RandomnessAnalyzer:
     def _post_decrypt(self, dest, elapsed):
         self._crypto_spinner.stop()
         fname = os.path.basename(dest)
-        self._crypto_status(f"Decrypted → {fname}", SUCCESS)
+        fdir = os.path.dirname(dest)
+        self._crypto_status(f"✓ Decrypted → {fname}", SUCCESS)
         size_kb = os.path.getsize(dest) / 1024
         self._crypto_info_var.set(
-            f"AES‑256‑GCM\n"
+            f"AES‑256‑GCM  ✓ Decrypted\n"
+            f"─────────────────────\n"
             f"Output: {fname}\n"
+            f"Saved in: {fdir}\n"
             f"Size: {size_kb:.1f} KB\n"
-            f"Time: {elapsed*1000:.1f} ms")
+            f"Time: {elapsed*1000:.1f} ms\n"
+            f"─────────────────────\n"
+            f"File restored successfully")
         self._update_crypto_buttons()
 
 
